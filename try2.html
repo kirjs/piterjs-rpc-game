@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <!-- The core Firebase JS SDK is always required and must be listed first -->
+    <script src="/__/firebase/7.15.0/firebase-app.js"></script>
+
+    <!-- TODO: Add SDKs for Firebase products that you want to use
+         https://firebase.google.com/docs/web/setup#available-libraries -->
+
+    <!-- Initialize Firebase -->
+    <script src="/__/firebase/init.js"></script>
+    <script src="/__/firebase/7.15.0/firebase-auth.js"></script>
+    <script src="/__/firebase/7.15.0/firebase-firestore.js"></script>
+    <style>
+        svg {
+            width: 500px;
+            height: 500px;
+            background: radial-gradient(#51d700, #e5df00, #e5df00, #ff7000);
+        }
+    </style>
+</head>
+<body>
+
+</body>
+<script type="module">
+    import {html, render, svg} from 'https://unpkg.com/lit-html?module';
+
+    async function init() {
+        const uid = (await firebase.auth().signInAnonymously()).user.uid;
+
+        const ref = firebase.firestore().collection('games3');
+
+        const state = {
+            side: chooseSide(uid),
+
+        };
+
+        const emojis = ['🦠', '💊', '🐶'];
+
+        function chooseSide(uid) {
+            return Math.floor((parseInt(uid.substr(0, 1), 36) / 12));
+        }
+
+        const citiesList = [
+            {
+                name: 'Moscow',
+                points: 1,
+                icon: '🍹',
+            },
+            {
+                name: 'New York',
+                points: 2,
+                icon: '🗽',
+            },
+            {
+                name: 'Tokyo',
+                points: 3,
+                icon: '🗼',
+            },
+            {
+                name: 'Cairo',
+                points: 4,
+                icon: '🇪🇬',
+            },
+            {
+                name: 'Rio De Janeiro',
+                points: 5,
+                icon: '🌴',
+            },
+            {
+                name: 'Lagos',
+                points: 6,
+                icon: '🇳🇬',
+            },
+            {
+                name: 'Sri Jayawardenepura Kotte',
+                points: 8,
+                icon: '🇱🇰',
+            },
+        ];
+
+        function makeMove(i) {
+            ref.add({
+                i,
+                uid,
+                time: firebase.firestore.FieldValue.serverTimestamp(),
+                side: state.side
+            })
+        }
+
+        ref.orderBy('time', 'asc').onSnapshot(snapshot => {
+            if (!snapshot.metadata.hasPendingWrites) {
+                calcScores(snapshot.docs.map(d => d.data()));
+                reRender();
+            }
+        });
+
+
+        function wins(a, b) {
+            return (((a - b + 3) % 3) === 1);
+        }
+
+        function calcScores(docs) {
+            const cities = {};
+            state.scores = [];
+            const uids = {};
+
+            for (const d of docs) {
+                if (!cities[d.i]) {
+                    cities[d.i] = {
+                        score: 1,
+                        side: d.side,
+                        time: d.time ? d.time.seconds : +Date,
+                    };
+                } else {
+                    if (cities[d.i].side === d.side) {
+                        cities[d.i].score++;
+                    } else {
+
+                        if (wins(d.side, cities[d.i].side)) {
+                            cities[d.i].score--;
+                            if (cities[d.i].score === 0) {
+
+
+                                if (d.time) {
+                                    uids[d.uid] = uids[d.uid] || 0;
+                                    uids[d.uid]++;
+
+                                    const score = d.time.seconds - cities[d.i].time;
+                                    state.scores[d.side] = state.scores[d.side] || 0;
+                                    state.scores[d.side] += score * citiesList[d.i].points;
+
+                                }
+
+                                cities[d.i].score = 1;
+                                cities[d.i].side = d.side;
+                                cities[d.i].time = d.time ? d.time.seconds : +Date
+                            }
+                        } else {
+                        }
+                    }
+
+                }
+            }
+
+            const now = firebase.firestore.Timestamp.now().seconds
+            for (const [i, c] of Object.entries(cities)) {
+                const score = now - c.time;
+                state.scores[c.side] = state.scores[c.side] || 0;
+                state.scores[c.side] += score * citiesList[i].points;
+            }
+
+            state.heroes = Object.entries(uids).map(([uid, score]) => ({score, uid})).sort((a, b) => b.score - a.score);
+            state.cities = cities;
+        }
+
+        function renderGame() {
+            return html`
+        ${emojis[state.side]}
+        ${uid}
+
+        <div style="display: grid; font-size: 30px;grid-row-gap: 20px;grid-column-gap: 20px; grid-template-columns:  30px fit-content(200px) 30px auto">
+                 ${citiesList.map((c, i) =>
+                html`
+                    <div>${c.icon}</div>
+                    <div>${c.name}</div>
+                    <div style="background: #9cc8dd;border-radius: 50%;text-align:center;width: 40px;height: 40px;">${c.points}</div>
+                    <button @click="${e => makeMove(i)}" style="background: white;font-size: 40px;border: 1px #ddd solid">
+                      ${state.cities && state.cities[i] ? emojis[state.cities[i].side].repeat(state.cities[i].score) : 'Available'}
+                    </button>
+                    `
+            )}
+                 </div>
+        <h2>scores</h2>
+         <div class="score" style="display: grid; grid-template-columns: 100px 100px; font-size: 40px;">
+            ${
+                (state.scores || []).map((s, i) => {
+                    return html`
+                    <div>${emojis[i]}</div>
+                    <div>${s}</div>
+
+                 `
+                })
+            }
+        </div>
+            `;
+        }
+
+        function reRender() {
+            render(renderGame(), document.body);
+        }
+
+        state.name = 'https://delte-me-cf17b.web.app';
+        reRender();
+    }
+
+    init();
+</script>
+</html>
